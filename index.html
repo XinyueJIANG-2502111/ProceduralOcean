@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071522" />
+    <title>Finite Palette Ocean</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div class="title-card">
+      <span>PROCEDURAL WATERS</span>
+      <small>FINITE PALETTE ENVIRONMENT · PORTFOLIO v0.1</small>
+    </div>
+    <div class="help">左键观察 · 右键升降 / 下潜 · W/S 前后移动 · H 隐藏面板</div>
+    <div id="app-status" class="status-card" role="status" aria-live="polite">Initializing ocean environment…</div>
+    <div id="app-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <section id="controls-help" class="controls-help" aria-labelledby="controls-help-title" hidden>
+      <button id="controls-help-close" type="button" aria-label="Close controls help">×</button>
+      <h2 id="controls-help-title">Controls / 操作</h2>
+      <dl>
+        <div><dt>Look / 观察</dt><dd>左键拖拽，同时控制 yaw 与 pitch</dd></div>
+        <div><dt>Move / 移动</dt><dd><kbd>W</kbd> / <kbd>S</kbd> 沿当前水平方向前进或后退</dd></div>
+        <div><dt>Dive / 升降</dt><dd>右键向上拖拽上升，向下拖拽下潜</dd></div>
+        <div><dt>Interface / 面板</dt><dd><kbd>H</kbd> 隐藏或恢复控制面板</dd></div>
+        <div><dt>Reset / 重置</dt><dd>在 Help &amp; Reset 中分别重置场景或相机</dd></div>
+      </dl>
+    </section>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+# npm dependencies and local logs
+node_modules/
+npm-debug.log*
+
+# Vite build output and TypeScript build cache
+/dist/
+*.tsbuildinfo
+
+# Local environment settings (keep the example shareable)
+.env
+.env.*
+!.env.example
+
+# OS metadata
+.DS_Store
+Thumbs.db
