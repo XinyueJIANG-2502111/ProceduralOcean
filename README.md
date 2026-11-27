@@ -1,167 +1,65 @@
-# Finite Palette Ocean — Portfolio v0.1
+# Finite Palette Ocean
 
-A browser-based procedural ocean environment built with TypeScript, Three.js, GLSL, and the Web Audio API. The project explores a physically coherent baseline—waves, atmosphere, weather, reflection, water volume, and surface crossing—followed by palette-guided stylization inspired by a dynamic 16-color palette.
+夕暮れの海を自由に見渡し、そのまま水中へ潜れるブラウザ作品です。うねり、空の色、海面の反射、雨音をリアルタイムに生成し、時刻や天候の変化をひとつの風景として描きます。光と波の動きを保ちながら、刻々と変わる16色のパレットで空と海をどう描き分けられるかを探りました。
 
-The scene is generated at runtime. It does not require image textures, prerecorded ambience, a backend, or external scene assets.
+[English README](README.en.md)
 
-## Features
+## 鑑賞の手引き
 
-- Directional swell and wind-wave fields with deep-water dispersion
-- Procedural atmosphere, sun, moon, twilight, clouds, rain, and environment reflection
-- Physical, tone-mapped, palette, and palette-with-dithering rendering modes
-- Water absorption, scattering, refraction, seabed visibility, and underwater surface optics
-- Continuous camera transitions between air and water
-- Procedural ocean and rain audio with air/underwater filtering
-- Showcase presets for calm daylight, sunset, rain, and storm
-- Compact public controls with the full diagnostic interface kept behind an Advanced mode
+起動時の表示は英語です。右上の操作パネルの先頭にある **Language** から **English**、**简体中文**、**日本語** を選べます。シーンの設定を保ったまま、詳細・デバッグ画面、操作ガイド、通知やエラーメッセージも切り替わります。再読み込みすると英語に戻ります。以下の操作名は初期表示の英語に合わせています。
 
-Foam and experimental sun shafts remain disabled in Portfolio v0.1.
+- **夕日が沈むまで**　初期画面は日没の少し前です。そのまま眺めるか、`Time of Day` を18時前後でゆっくり動かしてみてください。海面の輪郭が太陽の下端から少しずつ円盤を隠し、最後の光が水平線に沈みます。
+- **同じ海を異なる画調で**　`Rendering Mode` を `Physical` から `Final / Palette + Dithering` に切り替えると、連続した空のグラデーションや波の照り返しが、限られた色の段階と細かなディザでどう表現されるかを比較できます。
+- **雨の海に潜る**　`Rain` を選び、`Enable Audio / Mute` で音を有効にします。右ボタンを押したまま下へドラッグして潜ると、雨音の高域が和らぎます。水中から見上げると、見る角度によって空が透ける部分と水面が鏡のように反射する部分が現れます。
 
-## Technology Stack
+| 操作 | 動作 |
+| --- | --- |
+| 左ドラッグ | 視線を上下左右に動かす |
+| 右ドラッグ | 上にドラッグして浮上、下にドラッグして潜る |
+| `W` / `S` | 視線の水平成分に沿って前進・後退する |
+| `H` | 操作パネルを隠す・再表示する |
+| `Reset Camera` | 初期の視点に戻る |
 
-- TypeScript 5
-- Three.js / WebGL2
-- GLSL vertex and fragment shaders
-- Vite
-- lil-gui
-- Native Web Audio API
+## ローカルで起動する
 
-## Installation
+Node.js の対応範囲は `^20.19.0 || >=22.12.0` です。表示には WebGL2 に対応したデスクトップブラウザと、有効なハードウェアアクセラレーションが必要です。専用サーバーや環境変数の設定は不要です。
 
-Requirements:
+プロジェクトのルートで次のコマンドを実行し、Vite が表示するローカル URL を開きます。
 
-- Node.js 20 or newer is recommended
-- A current WebGL2-capable desktop browser
-- Hardware acceleration enabled in the browser
-
-```bash
-npm install
+```sh
+npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite.
+本番用の表示を確認するには、次の順に実行します。`build` は TypeScript の型チェック後に静的ファイルを `dist/` へ出力します。公開時はこのディレクトリの中身を静的ホスティングに配置できます。
 
-## Development
-
-```bash
-npm run dev
-```
-
-The application runs entirely in the browser. Environment changes are interpolated through `EnvironmentController`; public presets do not write shader uniforms directly.
-
-## Production Build
-
-```bash
+```sh
 npm run build
 npm run preview
 ```
 
-The static output is written to `dist/`. Vite uses relative asset paths, so the build can be hosted at a domain root, a repository subdirectory, or a generic static file host without assuming a future repository name.
+## 実装の要点
 
-## Controls
+**波と水面の境界**　長いうねりには水平方向の変位を含むゲルストナー波を使い、その上に風向に沿った短い波を重ねています。カメラ位置の波高は CPU 側でも計算し、海面と水中のシェーダーで同じ波成分を使います。波の上下で視点が水面をかすめても空気中と水中の表示が細かく切り替わらないよう、潜るときと浮上するときの判定にわずかな幅を設けています。
 
-| Input | Action |
-|---|---|
-| Left mouse drag | Change yaw and pitch together for free observation |
-| Right mouse drag upward/downward | Move vertically in world space; rise or dive |
-| `W` / `S` | Move forward/backward horizontally using camera yaw |
-| `H` | Hide or restore the control panel |
-| Reset Camera button | Return to the initial portfolio view |
+**空と色**　Three.js と GLSL で大気散乱、雲、太陽、月を描き、生成した空のキューブマップを、海面の反射、水中から見上げたときの屈折、水平線付近の大気遠近表現に使います。`Enable Environment Reflection` をオフにしても、水中の屈折と大気遠近表現は時刻や天候の変化に追従します。夕日の円盤は周囲の光芒とは別に明るさを計算し、沈むときの輪郭は実際に描画した波が決めます。最終画面では空、水、ハイライトに応じてパレットの色を選び、連続色との混合やディザで階調を整えています。
 
-The camera controller intentionally has no wheel zoom or keyboard vertical movement.
+**水中の光と音**　水中を光が進む距離に応じて吸収と散乱を計算し、水面では屈折と全反射を描き分けます。音は Web Audio API で波の低い響きや雨粒の音を合成し、動く水面からの深さに合わせてフィルターをかけています。画像テクスチャや録音済みの環境音は使用していません。
 
-## Showcase Controls
+## プロジェクト構成
 
-The default interface exposes only:
+| 場所 | 主な役割 |
+| --- | --- |
+| [src/core/](src/core/) | 描画ループ、カメラ操作、視点が空気中か水中かの判定 |
+| [src/config/showcase.ts](src/config/showcase.ts)・[src/environment/](src/environment/) | 展示プリセット、時刻・天候の更新、反射・屈折・大気遠近表現で共有する環境マップ |
+| [src/ocean/](src/ocean/)・[src/sky/](src/sky/)・[src/weather/](src/weather/) | 波と波紋、空、雨の生成と描画 |
+| [src/shaders/](src/shaders/)・[src/palette/](src/palette/) | 水中光学、大気散乱、色の割り当て |
+| [src/audio/](src/audio/)・[src/ui/](src/ui/) | 環境音の合成、展示・デバッグ用の操作パネル、翻訳辞書 |
 
-- Time of Day
-- Weather / Rain
-- Wind
-- Rendering Mode
-- Audio Enable / Mute
-- Master Volume
-- Calm Day, Sunset, Rain, and Storm presets
-- Reset to Default
-- Reset Camera
-- Controls Help
+## 展示版について
 
-Choose **Advanced / Debug** from the Interface selector to reveal shader diagnostics, wave internals, atmosphere and water coefficients, underwater debug views, audio diagnostics, and lightweight runtime statistics.
+WebGL コンテキストが失われると、復旧を待つメッセージを表示します。コンテキストが復旧すると、キューブマップの6面をすべて再生成してから最初のフレームを描画し、描画に成功した時点でメッセージを消します。
 
-## Rendering Modes
+Portfolio v0.1 は海面付近からの鑑賞を想定しています。海面にはカメラに追従する有限のメッシュを使っており、極端に高い視点ではその端が見えることがあります。白波と水中の光芒は展示設定で無効にしています。実装上の制約は[既知の制限（英語）](docs/known-limitations.md)にまとめています。
 
-1. **Physical** — continuous linear physical shading without palette mapping
-2. **Physical + Tone Mapping** — exposure and tone compression applied to the physical result
-3. **Palette** — semantic palette-guided stylization
-4. **Final / Palette + Dithering** — palette-guided output with restrained ordered dithering
-
-The final image is not claimed to contain strictly sixteen output colors. Continuous physical lighting, semantic palette matching, blending, and color-space conversion remain part of the pipeline.
-
-## Audio
-
-Audio is disabled by default. Select **Enable Audio / Mute** from the UI to create or resume the `AudioContext` from a user gesture, as required by browser autoplay rules.
-
-The audio engine generates ocean rumble, broadband water movement, non-periodic surge, rain texture, and droplet transients procedurally. Camera depth relative to the animated surface continuously crossfades between air and filtered underwater buses. No prerecorded audio files are loaded.
-
-Resetting the showcase mutes audio and restores its volume defaults without creating a second `AudioContext`.
-
-## Technical Overview
-
-### Procedural Wave Field
-
-Large swell and wind-driven main waves are evaluated as directional Gerstner-style components using deep-water dispersion. Smaller scales are represented by irregular directional normal detail. Rain ripples use a bounded analytical ring pool.
-
-### Procedural Atmosphere and Clouds
-
-The sky combines simplified Rayleigh/Mie responses, horizon haze, solar and lunar direction, and domain-warped procedural clouds. The same environment state drives the visible sky and the reflection capture.
-
-### Environment Reflection
-
-A small procedural cubemap captures atmosphere and clouds. Water reflection selects mip levels from surface roughness while analytical sun and moon highlights remain separate.
-
-### Palette-Guided Rendering
-
-Physical radiance is tone mapped and optionally matched against a dynamic palette using material semantics for sky, water, clouds, highlights, and foam. Ordered dithering is applied only in the final mode.
-
-### Water Volume and Underwater Optics
-
-The water path uses absorption, scattering, directional underwater illumination, refraction, exact water-to-air Fresnel, total internal reflection, and a procedural seabed. Surface traces and camera-medium hysteresis support continuous waterline crossing.
-
-### Procedural Audio
-
-Persistent Web Audio nodes generate layered ocean and rain signals. Weather values drive their gain and spectral character; camera depth controls air/water crossfades and underwater low-pass filtering.
-
-## Loading, Compatibility, and Diagnostics
-
-- WebGL2 support is checked before renderer creation.
-- Initialization, shader compilation, and WebGL context-loss failures produce a visible message instead of a black screen.
-- Device pixel ratio is capped at `2` and recalculated on resize.
-- Advanced diagnostics expose CPU frame cadence, approximate frame time, renderer resolution, draw calls, and triangle count. These values are not GPU timing measurements.
-- Audio startup failures are non-blocking and do not stop the WebGL scene.
-
-## Static Deployment
-
-Upload the contents of `dist/` to any static host. No backend or environment variables are required. The deployment should serve `index.html` and the generated `assets/` directory from the same location.
-
-Examples include GitHub Pages, Cloudflare Pages, Netlify, Vercel static hosting, or a conventional web server. Portfolio v0.1 has been prepared for deployment but this repository does not claim a completed external deployment.
-
-## Known Limitations
-
-See [docs/known-limitations.md](docs/known-limitations.md).
-
-## Portfolio Capture
-
-Shot planning, screenshot names, and a suggested short video sequence are documented in [docs/portfolio.md](docs/portfolio.md). All published screenshots should be captured from the running project; external reference imagery should not be presented as project output.
-
-Automated checks, the in-app performance comparison, and remaining manual release gates are tracked in [docs/release-checklist.md](docs/release-checklist.md).
-
-## Credits and Development Process
-
-- Three.js and its type definitions
-- lil-gui
-- Vite and TypeScript
-
-Development used AI coding agents as implementation and review assistants. Their work included code generation, debugging suggestions, refactoring support, and documentation drafting under iterative human direction and visual review. The project author should add a personal contribution statement before publication rather than treating generated text as proof of individual authorship.
-
-## License
-
-No public license has been selected. Add an explicit license before redistributing the source as an open-source project.
+制作には Three.js、TypeScript、Vite、lil-gui を使用しました。実装、デバッグ、レビュー、文書作成では AI コーディング支援を利用し、画面を確認しながら調整を重ねました。

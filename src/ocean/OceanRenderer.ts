@@ -21,7 +21,6 @@ uniform float uMainWaveStrength;
 uniform vec3 uCameraPosition;
 uniform int uSwellCount;
 uniform int uMainWaveCount;
-uniform int uWaveDebugMode;
 uniform vec4 uSwellWaves[6];
 uniform vec2 uSwellShapes[6];
 uniform vec4 uMainWaves[20];
@@ -91,18 +90,15 @@ void main() {
   // English: Preserve most main-wave displacement at long range, removing only the portion that would become under-sampled.
   // 日本語: 遠距離でも主風浪変位の大部分を残し、標本不足になる成分だけを抑える。
   float mainDistanceWeight=mix(.72,1.0,1.0/(1.0+pow(horizontalDistance/250.0,2.0)));
-  bool diagnosticDebug=uWaveDebugMode>=4;
-  bool includeSwell=uWaveDebugMode==0||uWaveDebugMode==1||diagnosticDebug;
-  bool includeMain=uWaveDebugMode==0||uWaveDebugMode==2||diagnosticDebug;
   for (int i=0; i<6; i++) {
     if (i >= uSwellCount) break;
     // English: Anchor phase in world space so mesh recentering never resets the visible wave pattern.
     // 日本語: メッシュを再配置しても波の見た目がリセットされないよう、位相をワールド空間に固定する。
-    if(includeSwell)pos+=swellWave(baseWorld.xz,uSwellWaves[i],uSwellShapes[i],tangent,binormal,crestCurvature,curvatureWeight,waveNormalization);
+    pos+=swellWave(baseWorld.xz,uSwellWaves[i],uSwellShapes[i],tangent,binormal,crestCurvature,curvatureWeight,waveNormalization);
   }
   for(int i=0;i<20;i++){
     if(i>=uMainWaveCount)break;
-    if(includeMain)windWave(baseWorld.xz,uMainWaves[i],mainDistanceWeight,pos,tangent,binormal,crestCurvature,curvatureWeight,waveNormalization);
+    windWave(baseWorld.xz,uMainWaves[i],mainDistanceWeight,pos,tangent,binormal,crestCurvature,curvatureWeight,waveNormalization);
   }
   // English: Stabilize only far vertical geometry so low tessellation cannot bend the silhouette; analytic normals and fragment-scale reflection detail remain active.
   // 日本語: 低テッセレーションで輪郭が曲がらないよう遠方の鉛直ジオメトリだけを安定化し、解析法線とフラグメント反射ディテールは維持する。
@@ -526,6 +522,20 @@ export class OceanRenderer {
   private spectrumKey='';
   private currentWaveEnergy=0;
 
+  get activeSwellCount():number {
+    const state=this.environment.state;
+    const mode=Math.round(state.waveDebugMode);
+    if(mode===2||mode===3)return 0;
+    return THREE.MathUtils.clamp(Math.round(state.swellCount),1,this.swellSpectrum.waves.length);
+  }
+
+  get activeMainWaveCount():number {
+    const state=this.environment.state;
+    const mode=Math.round(state.waveDebugMode);
+    if(mode===1||mode===3)return 0;
+    return THREE.MathUtils.clamp(Math.round(state.mainWaveCount),4,this.windWaveSpectrum.waves.length);
+  }
+
   get waveEnergy():number{return this.currentWaveEnergy;}
   get surfaceWaveData(){return {swellWaves:this.swellSpectrum.waves,swellShapes:this.swellSpectrum.shapes,mainWaves:this.windWaveSpectrum.waves};}
 
@@ -535,7 +545,7 @@ export class OceanRenderer {
     this.windWaveSpectrum.generate(s);
     this.material = new THREE.ShaderMaterial({ side:THREE.DoubleSide,vertexShader, fragmentShader, uniforms: {
       uTime:{value:0},uWind:{value:0},uSwellStrength:{value:s.swellStrength},uSwellDirection:{value:s.swellDirection},uSwellDirectionOffset:{value:s.swellDirectionOffset},
-      uWindDirection:{value:0},uDirectionSpread:{value:s.directionSpread},uMainWaveStrength:{value:s.mainWaveStrength},uSwellCount:{value:s.swellCount},uMainWaveCount:{value:s.mainWaveCount},uWaveDebugMode:{value:s.waveDebugMode},
+      uWindDirection:{value:0},uDirectionSpread:{value:s.directionSpread},uMainWaveStrength:{value:s.mainWaveStrength},uSwellCount:{value:this.activeSwellCount},uMainWaveCount:{value:this.activeMainWaveCount},uWaveDebugMode:{value:s.waveDebugMode},
       uSwellWaves:{value:this.swellSpectrum.waves},uSwellShapes:{value:this.swellSpectrum.shapes},uMainWaves:{value:this.windWaveSpectrum.waves},uRain:{value:0},uStorm:{value:0},uClouds:{value:s.cloudCoverage},
       uRippleStrength:{value:1},uMidStrength:{value:.12},uHighStrength:{value:.04},uFoamStrength:{value:s.foamStrength},uWaveEnergy:{value:0},uDetailFalloff:{value:.018},uAerialDensity:{value:.012},
       uSunDirection:{value:new THREE.Vector3()},uMoonDirection:{value:new THREE.Vector3()},uMoonIntensity:{value:s.moonIntensity},uMoonDiscScale:{value:0},uCameraPosition:{value:new THREE.Vector3()},uRipples:{value:this.ripples.data},uPalette:{value:palette.colors},
@@ -557,7 +567,7 @@ export class OceanRenderer {
     const s=this.environment.state;
     const windCurve=smoothstep(.03,1,s.windSpeed);
     let baseX=worldX,baseZ=worldZ;
-    const swellCount=THREE.MathUtils.clamp(Math.round(s.swellCount),1,this.swellSpectrum.waves.length);
+    const swellCount=this.activeSwellCount;
     for(let iteration=0;iteration<2;iteration++){
       let displacementX=0,displacementZ=0;
       for(let i=0;i<swellCount;i++){
@@ -581,7 +591,7 @@ export class OceanRenderer {
       const amplitude=wave.y*s.swellStrength*s.waveStrength*THREE.MathUtils.lerp(.92,1.08,smoothstep(.15,1,s.windSpeed));
       displacementHeight+=amplitude*Math.sin(phase);
     }
-    const mainCount=THREE.MathUtils.clamp(Math.round(s.mainWaveCount),4,this.windWaveSpectrum.waves.length);
+    const mainCount=this.activeMainWaveCount;
     const spreadResponse=THREE.MathUtils.lerp(.9,1.18,windCurve);
     for(let i=0;i<mainCount;i++){
       const wave=this.windWaveSpectrum.waves[i];
@@ -614,7 +624,7 @@ export class OceanRenderer {
     this.ripples.update(dt);
     const u=this.material.uniforms;
     u.uTime.value=elapsed;u.uWind.value=s.windSpeed;u.uSwellStrength.value=s.swellStrength*s.waveStrength;u.uSwellDirection.value=s.swellDirection;u.uSwellDirectionOffset.value=s.swellDirectionOffset;
-    u.uWindDirection.value=s.windDirection;u.uDirectionSpread.value=s.directionSpread;u.uMainWaveStrength.value=s.mainWaveStrength*s.waveStrength;u.uSwellCount.value=Math.round(s.swellCount);u.uMainWaveCount.value=Math.round(s.mainWaveCount);u.uWaveDebugMode.value=Math.round(s.waveDebugMode);
+    u.uWindDirection.value=s.windDirection;u.uDirectionSpread.value=s.directionSpread;u.uMainWaveStrength.value=s.mainWaveStrength*s.waveStrength;u.uSwellCount.value=this.activeSwellCount;u.uMainWaveCount.value=this.activeMainWaveCount;u.uWaveDebugMode.value=Math.round(s.waveDebugMode);
     u.uRain.value=s.precipitation;u.uStorm.value=s.stormIntensity;u.uClouds.value=s.cloudCoverage;u.uRippleStrength.value=s.rippleStrength;u.uMidStrength.value=s.midNormalStrength;u.uHighStrength.value=s.highNormalStrength;u.uFoamStrength.value=s.foamStrength;
     u.uDetailFalloff.value=s.detailFalloff;u.uAerialDensity.value=s.aerialDensity;u.uDitherStrength.value=s.ditheringStrength;u.uQuantLevels.value=s.quantizationLevels;u.uPaletteStrength.value=s.paletteStrength;u.uRenderingMode.value=s.renderingMode;
     u.uEnvironmentReflectionEnabled.value=s.environmentReflectionEnabled?1:0;u.uEnvironmentReflectionOnly.value=s.environmentReflectionOnly?1:0;

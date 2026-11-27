@@ -331,16 +331,26 @@ CloudResult evaluateVisibleCloudLayer(vec3 direction,vec3 sunDirection,float sto
 `;
 
 export const skyEnvironmentGLSL = /* glsl */`
-vec3 evaluatePhysicalSky(vec3 direction,vec3 sunDirection,float storm,out float cloudAlpha,out float solarHighlight) {
+float solarDiscMask(vec3 ray,vec3 sunDirection) {
+  float angularDistance=acos(clamp(dot(ray,sunDirection),-1.0,1.0));
+  return 1.0-smoothstep(.015,.023,angularDistance);
+}
+
+vec3 solarDiscRadiance(vec3 sunDirection) {
+  // The resolved disc stays luminous until the ocean silhouette covers it.
+  return evaluateSunColor(sunDirection.y)*mix(.78,1.0,smoothstep(.025,.14,sunDirection.y));
+}
+
+vec3 evaluatePhysicalSky(vec3 direction,vec3 sunDirection,float storm,float discTransmission) {
   vec3 ray=normalize(direction);
   vec3 physicalSky=evaluateAtmosphere(ray,sunDirection,storm);
   vec4 cloud=evaluateCloudLayer(ray,sunDirection,storm);
   physicalSky=mix(physicalSky,cloud.rgb,cloud.a);
-  float angularDistance=acos(clamp(dot(ray,sunDirection),-1.0,1.0));
-  float disc=1.0-smoothstep(.015,.023,angularDistance);
+  float disc=solarDiscMask(ray,sunDirection)*discTransmission;
   float halo=pow(evaluateSunAngularProximity(ray,sunDirection),180.0)*(.32+uMieStrength*.45);
   float sunVisibility=evaluateSunDiscVisibility(sunDirection.y);
-  physicalSky+=evaluateSolarRadiance(sunDirection)*sunVisibility*(disc*3.2+halo)*(1.0-cloud.a*.82);
+  vec3 sunlight=solarDiscRadiance(sunDirection)*disc*3.2+evaluateSolarRadiance(sunDirection)*sunVisibility*halo;
+  physicalSky+=sunlight*(1.0-cloud.a*.82);
   float moonCos=clamp(dot(ray,uMoonDirection),-1.0,1.0);
   // English: Disc thresholds are cosines of angular radii; capture scales only the high-frequency disc, leaving analytic ocean glints in control.
   // 日本語: 円盤の閾値には角半径の余弦を使い、環境取得では高周波の月盤だけを弱めて海面の解析的な反射を主役にする。
@@ -348,8 +358,6 @@ vec3 evaluatePhysicalSky(vec3 direction,vec3 sunDirection,float storm,out float 
   float moonHalo=pow(max(moonCos,0.0),1400.0)*.075;
   float moonVisibility=evaluateMoonVisibility(uMoonDirection,sunDirection);
   physicalSky+=evaluateMoonDiscRadiance(uMoonDirection)*moonVisibility*uMoonIntensity*(moonDisc+moonHalo)*uMoonDiscScale*(1.0-cloud.a*.9);
-  cloudAlpha=cloud.a;
-  solarHighlight=max(disc,halo)*sunVisibility;
   return physicalSky;
 }
 `;

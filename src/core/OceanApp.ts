@@ -10,11 +10,15 @@ import { RainSystem } from '../weather/RainSystem';
 import { ProceduralAudioEngine } from '../audio/ProceduralAudioEngine';
 import { SHOWCASE_CAMERA } from '../config/showcase';
 import type { RuntimeStats } from '../ui/DebugPanel';
+import type { Locale, PageMessage } from '../ui/translations';
 
 export interface OceanAppOptions {
   toggleControlsHelp():void;
-  notify(message:string):void;
-  reportFatalError(message:string):void;
+  notify(message:PageMessage, detail?:string):void;
+  reportFatalError(message:PageMessage, detail?:string):void;
+  onLanguageChange(locale:Locale):void;
+  onContextLost():void;
+  onFirstFrame():void;
 }
 
 export class OceanApp {
@@ -39,6 +43,7 @@ export class OceanApp {
   private underwaterDebugCameraActive=false;
   private appliedUnderwaterDepth=Number.NaN;
   private appliedUnderwaterView=-1;
+  private renderState:'awaitingFrame'|'ready'|'contextLost'='awaitingFrame';
   private running=false;
   private disposed=false;
   private physicalMedium:CameraMedium='air';
@@ -51,7 +56,7 @@ export class OceanApp {
     this.renderer.outputColorSpace=THREE.SRGBColorSpace;
     this.renderer.toneMapping=THREE.NoToneMapping;
     this.renderer.info.autoReset=false;
-    this.renderer.debug.onShaderError=()=>this.options.reportFatalError('Shader compilation failed. Check browser and GPU compatibility.');
+    this.renderer.debug.onShaderError=()=>this.options.reportFatalError('shaderFailed');
     this.host.appendChild(this.renderer.domElement);
     this.camera.position.set(...SHOWCASE_CAMERA.position);
     this.cameraController=new CameraController(this.camera,this.renderer.domElement,SHOWCASE_CAMERA.yaw,SHOWCASE_CAMERA.pitch,(height)=>{
@@ -68,6 +73,7 @@ export class OceanApp {
       resetCamera:this.resetCamera,
       toggleControlsHelp:this.options.toggleControlsHelp,
       notify:this.options.notify,
+      onLanguageChange:this.options.onLanguageChange,
     });
     this.renderer.domElement.addEventListener('webglcontextlost',this.onContextLost);
     this.renderer.domElement.addEventListener('webglcontextrestored',this.onContextRestored);
@@ -98,16 +104,23 @@ export class OceanApp {
     // テストカメラで到達した視点も含め、設定リセット時の現在視点を維持する。
     this.underwaterDebugCameraActive=false;
     this.environment.setTarget('cameraDebugHeight',this.camera.position.y);
-    this.options.notify('Showcase defaults restored. Camera position was preserved.');
+    this.options.notify('showcaseReset');
   };
   private readonly resetCamera=():void=>{
     this.environment.setTarget('underwaterDebugCamera',false);this.environment.setTarget('cameraDebugHeight',SHOWCASE_CAMERA.position[1]);
     this.underwaterDebugCameraActive=false;this.appliedUnderwaterDepth=Number.NaN;this.appliedUnderwaterView=-1;
     this.cameraController.setTransform(new THREE.Vector3(...SHOWCASE_CAMERA.position),SHOWCASE_CAMERA.yaw,SHOWCASE_CAMERA.pitch);
-    this.options.notify('Camera returned to the default showcase view.');
+    this.options.notify('cameraReset');
   };
-  private readonly onContextLost=(event:Event):void=>{event.preventDefault();this.options.reportFatalError('WebGL context lost. Reload the page to restart the renderer.');};
-  private readonly onContextRestored=():void=>this.options.notify('WebGL context restored. Reload if the scene does not resume correctly.');
+  private readonly onContextLost=(event:Event):void=>{
+    event.preventDefault();
+    this.renderState='contextLost';
+    this.options.onContextLost();
+  };
+  private readonly onContextRestored=():void=>{
+    this.reflectionEnvironment.invalidate();
+    this.renderState='awaitingFrame';
+  };
   private syncUnderwaterDebugCamera():void{
     const state=this.environment.state;
     if(state.underwaterDebugCamera!==this.underwaterDebugCameraActive){
@@ -174,6 +187,7 @@ export class OceanApp {
   };
   private readonly frame=():void=>{
     const frameInterval=this.clock.getDelta();
+    if(this.renderState==='contextLost')return;
     const dt=Math.min(frameInterval,.05),elapsed=this.clock.elapsedTime;
     this.renderer.info.reset();
     this.environment.update(dt);this.palette.update(this.environment.state);
@@ -193,6 +207,10 @@ export class OceanApp {
     this.rain.points.visible=!cameraUnderwater;
     this.sky.update(elapsed,this.camera,cameraUnderwater);this.reflectionEnvironment.update(this.renderer,elapsed);this.ocean.update(elapsed,dt,this.camera,cameraUnderwater);this.rain.update(dt,this.camera);
     this.renderer.render(this.scene,this.camera);
+    if(this.renderState==='awaitingFrame'&&!this.renderer.getContext().isContextLost()){
+      this.renderState='ready';
+      this.options.onFirstFrame();
+    }
     if(frameInterval>0)this.updateRuntimeStats(frameInterval);
   };
   private updateRuntimeStats(dt:number):void {

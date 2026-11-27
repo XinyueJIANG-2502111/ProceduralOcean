@@ -22,16 +22,14 @@ ${skyEnvironmentGLSL}
 
 void main() {
   vec3 direction=normalize(vDirection);
-  float cloudAlpha,solarHighlight;
-  vec3 upperEnvironment=evaluatePhysicalSky(direction,uSunDirection,uStorm,cloudAlpha,solarHighlight);
+  vec3 upperEnvironment=evaluatePhysicalSky(direction,uSunDirection,uStorm,step(0.0,direction.y));
 
   float horizontalLength=length(direction.xz);
   vec3 horizonDirection=vec3(0.0,.035,1.0);
   if(horizontalLength>.0001) {
     horizonDirection=normalize(vec3(direction.x/horizontalLength,.035,direction.z/horizontalLength));
   }
-  float horizonCloud,horizonSun;
-  vec3 horizonEnvironment=evaluatePhysicalSky(horizonDirection,uSunDirection,uStorm,horizonCloud,horizonSun);
+  vec3 horizonEnvironment=evaluatePhysicalSky(horizonDirection,uSunDirection,uStorm,0.0);
   vec3 lowerBase=mix(vec3(.012,.045,.055),vec3(.026,.055,.062),uStorm);
   vec3 lowerEnvironment=mix(horizonEnvironment,lowerBase,smoothstep(0.0,.82,-direction.y));
   // English: Fill the lower hemisphere continuously with horizon and water-compatible color instead of folding directions upward.
@@ -100,13 +98,17 @@ export class ProceduralEnvironmentMap {
     this.scene.add(this.camera);
   }
 
+  invalidate(): void {
+    this.initialized = false;
+  }
+
   update(renderer: THREE.WebGLRenderer,elapsed: number): void {
     const s=this.environment.state,u=this.material.uniforms;
     u.uTime.value=elapsed;u.uClouds.value=Math.max(s.cloudCoverage,s.stormIntensity*.82);u.uStorm.value=s.stormIntensity;u.uWind.value=s.windSpeed;
     u.uWindVector.value.set(Math.cos(s.windDirection),Math.sin(s.windDirection));this.environment.getSunDirection(this.sunDirection);
     this.moonDirection.copy(this.environment.moonLighting.direction);u.uMoonIntensity.value=this.environment.moonLighting.intensity;
     u.uTurbidity.value=s.turbidity;u.uRayleighStrength.value=s.rayleighStrength;u.uMieStrength.value=s.mieStrength;u.uHorizonHaze.value=s.horizonHaze;
-    if(!s.environmentReflectionEnabled)return;
+    // Underwater refraction and aerial perspective also sample the cubemap.
 
     this.frameIndex++;
     const updateRate=Math.max(1,Math.round(s.environmentMapUpdateRate));

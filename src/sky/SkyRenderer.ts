@@ -112,8 +112,7 @@ void main(){
     #include <colorspace_fragment>
     return;
   }
-  float cloudAlpha,solarHighlight;
-  vec3 physicalSky=evaluatePhysicalSky(direction,uSunDirection,uStorm,cloudAlpha,solarHighlight);
+  vec3 physicalSky=evaluatePhysicalSky(direction,uSunDirection,uStorm,1.0);
   if(uSurfaceCrossingDebugView>0){
     vec3 diagnostic=uSurfaceCrossingDebugView==1?(uCameraUnderwater==1?vec3(.08,.48,.9):vec3(.95,.62,.1)):uSurfaceCrossingDebugView==2?vec3(clamp(.5-uCameraSurfaceDelta*.12,0.0,1.0)):uSurfaceCrossingDebugView==6?vec3(clamp(direction.y*.5+.5,0.0,1.0)):vec3(0.0);
     gl_FragColor=vec4(diagnostic,1.0);
@@ -167,12 +166,11 @@ void main(){
   vec3 atmospherePhysical=evaluateAtmosphere(direction,uSunDirection,uStorm);
   CloudResult cloudPhysical=evaluateVisibleCloudLayer(direction,uSunDirection,uStorm);
   float stylizedCloudAlpha=stylizeCloudAlpha(cloudPhysical.alpha,cloudPhysical.lowFrequencyAlpha);
-  float angularDistance=acos(clamp(dot(direction,uSunDirection),-1.0,1.0));
-  float sunDisc=1.0-smoothstep(.015,.023,angularDistance);
+  float sunDisc=solarDiscMask(direction,uSunDirection);
   float sunHalo=pow(max(dot(direction,uSunDirection),0.0),180.0)*(.32+uMieStrength*.45);
   float sunVisibility=evaluateSunDiscVisibility(uSunDirection.y);
-  float sunMask=clamp((sunDisc+sunHalo*.42)*(1.0-stylizedCloudAlpha*.82)*sunVisibility,0.0,1.0);
-  vec3 sunPhysical=evaluateSolarRadiance(uSunDirection)*(1.25+sunDisc*1.95+sunHalo*.55);
+  float sunMask=clamp((sunDisc+sunHalo*.42*sunVisibility)*(1.0-stylizedCloudAlpha*.82),0.0,1.0);
+  vec3 sunPhysical=mix(evaluateSolarRadiance(uSunDirection),solarDiscRadiance(uSunDirection),sunDisc)*(1.25+sunDisc*1.95+sunHalo*.55);
   bool useSkyDither=uRenderingMode==3;
   vec3 atmosphereStylized=atmospherePhysical;
   if(uRenderingMode==1) atmosphereStylized=toneMapLinear(atmospherePhysical);
@@ -229,7 +227,7 @@ void main(){
 export class SkyRenderer {
   readonly mesh:THREE.Mesh;
   private readonly material:THREE.ShaderMaterial;
-  constructor(private readonly environment:EnvironmentController,palette:PaletteManager,ocean:OceanRenderer,environmentTexture:THREE.CubeTexture){
+  constructor(private readonly environment:EnvironmentController,palette:PaletteManager,private readonly ocean:OceanRenderer,environmentTexture:THREE.CubeTexture){
     const s=environment.state;
     const waves=ocean.surfaceWaveData;
     this.material=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,vertexShader,fragmentShader,uniforms:{
@@ -240,7 +238,7 @@ export class SkyRenderer {
       uRefractionStrength:{value:s.refractionStrength},uRefractionNormalDetail:{value:.18},uWaterVolumeDebugMode:{value:s.waterVolumeDebugMode},uCameraUnderwater:{value:0},
       uUnderwaterEnvironmentIntensity:{value:s.underwaterEnvironmentIntensity},uUnderwaterDebugView:{value:s.underwaterDebugView},
       uSwellStrength:{value:s.swellStrength*s.waveStrength},uSwellDirection:{value:s.swellDirection},uSwellDirectionOffset:{value:s.swellDirectionOffset},uWindDirection:{value:s.windDirection},uDirectionSpread:{value:s.directionSpread},uMainWaveStrength:{value:s.mainWaveStrength*s.waveStrength},
-      uSwellCount:{value:s.swellCount},uMainWaveCount:{value:s.mainWaveCount},uSwellWaves:{value:waves.swellWaves},uSwellShapes:{value:waves.swellShapes},uMainWaves:{value:waves.mainWaves},
+      uSwellCount:{value:ocean.activeSwellCount},uMainWaveCount:{value:ocean.activeMainWaveCount},uSwellWaves:{value:waves.swellWaves},uSwellShapes:{value:waves.swellShapes},uMainWaves:{value:waves.mainWaves},
       uCameraSurfaceDelta:{value:s.cameraSurfaceDelta},uCameraMediumOverride:{value:0},uSurfaceCrossingDebugView:{value:s.surfaceCrossingDebugView},
       uSunShaftsEnabled:{value:s.sunShaftsEnabled?1:0},uSunShaftStrength:{value:s.sunShaftStrength},uSunShaftContrast:{value:s.sunShaftContrast},uSunShaftMaxDistance:{value:s.sunShaftMaxDistance},
       uSkyQuantizationStrength:{value:s.skyQuantizationStrength},uSkyDitherStrength:{value:s.skyDitherStrength},uSkyHorizonPreservation:{value:s.skyHorizonPreservation},uSkyElevationBias:{value:s.skyElevationBias},uSkyLumaWeight:{value:s.skyLumaWeight},uSkyDebugView:{value:s.skyDebugView},
@@ -261,7 +259,7 @@ export class SkyRenderer {
     u.uRefractionStrength.value=s.refractionStrength;u.uWaterVolumeDebugMode.value=Math.round(s.waterVolumeDebugMode);u.uCameraUnderwater.value=cameraUnderwater?1:0;
     u.uUnderwaterEnvironmentIntensity.value=s.underwaterEnvironmentIntensity;u.uUnderwaterDebugView.value=Math.round(s.underwaterDebugView);
     u.uSwellStrength.value=s.swellStrength*s.waveStrength;u.uSwellDirection.value=s.swellDirection;u.uSwellDirectionOffset.value=s.swellDirectionOffset;u.uWindDirection.value=s.windDirection;u.uDirectionSpread.value=s.directionSpread;u.uMainWaveStrength.value=s.mainWaveStrength*s.waveStrength;
-    u.uSwellCount.value=Math.round(s.swellCount);u.uMainWaveCount.value=Math.round(s.mainWaveCount);u.uCameraSurfaceDelta.value=s.cameraSurfaceDelta;u.uCameraMediumOverride.value=s.cameraMediumOverride==='air'?1:s.cameraMediumOverride==='water'?2:0;
+    u.uSwellCount.value=this.ocean.activeSwellCount;u.uMainWaveCount.value=this.ocean.activeMainWaveCount;u.uCameraSurfaceDelta.value=s.cameraSurfaceDelta;u.uCameraMediumOverride.value=s.cameraMediumOverride==='air'?1:s.cameraMediumOverride==='water'?2:0;
     u.uSurfaceCrossingDebugView.value=Math.round(s.surfaceCrossingDebugView);u.uSunShaftsEnabled.value=s.sunShaftsEnabled?1:0;u.uSunShaftStrength.value=s.sunShaftStrength;u.uSunShaftContrast.value=s.sunShaftContrast;u.uSunShaftMaxDistance.value=s.sunShaftMaxDistance;
     u.uSkyQuantizationStrength.value=s.skyQuantizationStrength;u.uSkyDitherStrength.value=s.skyDitherStrength;u.uSkyHorizonPreservation.value=s.skyHorizonPreservation;u.uSkyElevationBias.value=s.skyElevationBias;u.uSkyLumaWeight.value=s.skyLumaWeight;u.uSkyDebugView.value=Math.round(s.skyDebugView);
     this.mesh.position.copy(camera.position);
